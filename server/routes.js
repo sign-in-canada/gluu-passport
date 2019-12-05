@@ -14,7 +14,12 @@ router.post('/auth/saml/:provider/callback',
 	processIdpInitiated,
     callbackResponse)
 
-router.get('/auth/:provider/callback',
+	router.get('/auth/saml/:provider/callback',
+	validateProvider,
+	authenticateRequestCallback,
+    logoutResponse)
+
+	router.get('/auth/:provider/callback',
 	validateProvider,
 	authenticateRequestCallback,
     callbackResponse)
@@ -23,6 +28,30 @@ router.get('/auth/:provider/:token',
 	validateProvider,
     validateToken,
     authenticateRequest)
+
+	router.get('/auth/:provider/:token/saml/:samlissuer',
+	validateProvider,
+    validateToken,
+	authenticateRequest)
+	
+router.get('/logout',
+	function (req, res) {
+		let provider = req.user.provider
+		logger.log2('verbose', 'logout of provider ' + provider)
+		let strategy = passport._strategy(provider)
+		logger.log2('verbose', 'Strategy name is ' + strategy.name)
+		if (strategy.name === 'saml') {
+			let relayState = req.query && req.query.post_logout_redirect_uri || '/'
+			req.query.RelayState = relayState
+			strategy.logout(req,
+				function (err, uri) {
+					req.logout()
+					res.redirect(uri)
+				}
+			)
+		}
+	}
+)
 
 router.get('/casa/:provider/:token',
 	(req, res, next) => {
@@ -156,6 +185,13 @@ function callbackResponse(req, res) {
 		postUrl = global.config.postProfileEndpoint
 	}
 
+	// HACK: Make a copy of the profile, then remove the profile data needed for SAML logout
+	user = JSON.parse(JSON.stringify(user))
+	delete user.sessionIndex;
+	delete user.nameID;
+	delete user.nameQualifier;
+	delete user.spNameQualifier;
+
 	//Apply transformation to user object and restore original provider value
 	user = misc.arrify(user)
 	user.provider = provider
@@ -196,6 +232,11 @@ function callbackResponse(req, res) {
 		</html>	`
 	)
 
+}
+
+function logoutResponse(req, res) {
+	let target = req.query && decodeURIComponent(req.query.RelayState) || '/'
+		res.redirect(target)
 }
 
 function handleError(req, res, msg) {
