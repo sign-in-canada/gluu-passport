@@ -62,7 +62,18 @@ function setupStrategy(prv) {
 		}
 		let samlStrategy = new strategy(
 			options,
-			(profile, cb) => processProfile(prv, profile, cb, { provider: id, getAssertionXml: profile.getAssertionXml })
+			(req, profile, cb) => {
+				// Stash the SAML subject & SessionIndex for future logout
+				req.session.samlSubject = {
+					"nameIDFormat": profile.nameIDFormat,
+					"nameQualifier": profile.nameQualifier,
+					"spNameQualifier": profile.spNameQualifier,
+					"nameID": profile.nameID,
+					"sessionIndex": profile.sessionIndex
+				}
+
+				processProfile(prv, profile, cb, { provider: id, getAssertionXml: profile.getAssertionXml })
+			}
 		)
 		passport.use(id, samlStrategy)
 		meta.generate(prv, samlStrategy)

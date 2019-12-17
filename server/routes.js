@@ -7,19 +7,21 @@ const
 	idpInitiated = require('./idp-initiated'),
 	misc = require('./utils/misc'),
 	logger = require("./utils/logging")
+	url = require('url')
 
+// CATS SAML Authentication Responses use the HTTP POST binding
 router.post('/auth/saml/:provider/callback',
 	validateProvider,
 	authenticateRequestCallback,
 	processIdpInitiated,
     callbackResponse)
 
-	router.get('/auth/saml/:provider/callback',
+// CATS SAML Logout Requests and Responses use the HTTP Redirect binding
+router.get('/auth/saml/:provider/callback',
 	validateProvider,
-	authenticateRequestCallback,
-    logoutResponse)
+    processLogout)
 
-	router.get('/auth/:provider/callback',
+router.get('/auth/:provider/callback',
 	validateProvider,
 	authenticateRequestCallback,
     callbackResponse)
@@ -29,28 +31,62 @@ router.get('/auth/:provider/:token',
     validateToken,
     authenticateRequest)
 
-	router.get('/auth/:provider/:token/saml/:samlissuer',
+router.get('/auth/:provider/:token/saml/:samlissuer',
 	validateProvider,
     validateToken,
 	authenticateRequest)
-	
-router.get('/logout',
-	function (req, res) {
-		let provider = req.user.provider
-		logger.log2('verbose', 'logout of provider ' + provider)
-		let strategy = passport._strategy(provider)
-		logger.log2('verbose', 'Strategy name is ' + strategy.name)
-		if (strategy.name === 'saml') {
-			let relayState = req.query && req.query.post_logout_redirect_uri || '/'
-			req.query.RelayState = relayState
-			strategy.logout(req,
-				function (err, uri) {
-					req.logout()
-					res.redirect(uri)
-				}
+
+// SP-initiated logout
+router.get('/logout/request', (req, res, next) => {
+	if (!(req.user && req.user.provider)) {
+		res.status(400).send('No Session')
+	} else {
+		const provider = req.user.provider
+		const strategy = passport._strategy(provider)
+		if (strategy.name === 'saml' && strategy._saml.options.logoutUrl && !req.user.logoutRequest) {
+			const relayState = req.query && req.query.post_logout_redirect_uri
+			if (relayState) {
+				req.query.RelayState = relayState
+			}
+			// Restore the SAML Subject for the logout request
+			req.user = req.session.samlSubject
+			logger.log2('debug', 'SAML Logout of subject ' + JSON.stringify(req.user))
+			strategy.logout(req, (err, uri) => {
+				req.logout()
+				res.redirect(uri)
+			}
 			)
+		} else {
+			res.send("Success")
 		}
 	}
+}
+)
+
+// Propagate SP Logout Response
+router.get('/logout/response/:status?', (req, res, next) => {
+	const status = req.params.status || 'Success'
+	if (!(req.user && req.user.provider)) {
+		res.status(400).send('No Session')
+	} else {
+		const provider = req.user.provider
+		const strategy = passport._strategy(provider)
+		if (req.user.logoutRequest) {
+			logger.log2('verbose', 'Sending SAML logout response to provider ' + provider)
+			req.samlLogoutRequest = req.user.logoutRequest
+			req.samlLogoutRequest.status = 'urn:oasis:names:tc:SAML:2.0:status:' + status
+			strategy._saml.getLogoutResponseUrl(req, {}, (err, url) => {
+				if (err) {
+					handleError(req, res, err.message)
+				} else {
+					res.redirect(url)
+				}
+			})
+		} else {
+			res.status(400).send("No logout request to respond to!")
+		}
+	}
+}
 )
 
 router.get('/casa/:provider/:token',
@@ -72,7 +108,6 @@ router.get('/token',
 )
 
 //Metadata
-
 router.get('/auth/meta/idp/:idp',
     function (req, res) {
 
@@ -185,13 +220,6 @@ function callbackResponse(req, res) {
 		postUrl = global.config.postProfileEndpoint
 	}
 
-	// HACK: Make a copy of the profile, then remove the profile data needed for SAML logout
-	user = JSON.parse(JSON.stringify(user))
-	delete user.sessionIndex;
-	delete user.nameID;
-	delete user.nameQualifier;
-	delete user.spNameQualifier;
-
 	//Apply transformation to user object and restore original provider value
 	user = misc.arrify(user)
 	user.provider = provider
@@ -234,9 +262,30 @@ function callbackResponse(req, res) {
 
 }
 
-function logoutResponse(req, res) {
-	let target = req.query && decodeURIComponent(req.query.RelayState) || '/'
-		res.redirect(target)
+function processLogout(req, res) {
+
+	function validateCallback(err, profile, loggedOut) {
+		logger.log2('debug', 'logout callback ' + JSON.stringify(err) + ' ' + JSON.stringify(profile) + ' ' + loggedOut)
+
+		if (err) {
+			logger.log2('error', err.stack)
+			res.status(400).send('Invalid SAML request') // TODO: Redirect to logout error UI page
+		} else if (profile) { // Logout Request
+			req.user.logoutRequest = profile
+			const redirectUri = encodeURIComponent('https://' + req.hostname + '/passport/logout/response')
+			res.redirect('/oxauth/restv1/end_session?post_logout_redirect_uri=' + redirectUri)
+		} else { // Logout Response
+			res.send("Success") 
+		}
+	}
+
+	const provider = req.params.provider
+	logger.log2('verbose', 'received logout from provider ' + provider)
+	const strategy = passport._strategy(provider)
+
+
+	var originalQuery = url.parse(req.url).query
+	strategy._saml.validateRedirect(req.query, originalQuery, validateCallback)
 }
 
 function handleError(req, res, msg) {
