@@ -36,6 +36,11 @@ router.get('/auth/:provider/:token/saml/:samlissuer',
     validateToken,
 	authenticateRequest)
 
+router.get('/auth/:provider/:token/id/:mfapai',
+        validateProvider,
+    validateToken,
+        authenticateRequest)
+
 // SP-initiated logout
 router.get('/logout/request', (req, res, next) => {
 	if (!(req.user && req.user.provider)) {
