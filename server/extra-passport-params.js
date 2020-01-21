@@ -11,6 +11,7 @@ const params = R.once(() => [
 		strategy: 'passport-saml',
 		passportAuthnParams: {},
 		options: {
+			passReqToCallback: true,
 			validateInResponseTo: true,
 			requestIdExpirationPeriodMs: 3600000,
 			decryptionPvk: fs.readFileSync(global.config.spTLSKey, 'utf-8'),
