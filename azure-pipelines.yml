@@ -36,7 +36,7 @@ steps:
   inputs:
     buildType: 'specific'
     project: '7302639f-e704-47c3-9557-99b4e04a75bc'
-    definition: '281'
+    definition: '283'
     buildVersionToDownload: 'latest'
     artifactName: 'passport-saml'
     targetPath: '$(Pipeline.Workspace)/passport-saml'
@@ -45,7 +45,7 @@ steps:
   inputs:
     buildType: 'specific'
     project: '7302639f-e704-47c3-9557-99b4e04a75bc'
-    definition: '279'
+    definition: '284'
     buildVersionToDownload: 'latest'
     artifactName: 'passport-openidconnect'
     targetPath: '$(Pipeline.Workspace)/passport-openidconnect'
