@@ -35,21 +35,20 @@ steps:
 - task: DownloadPipelineArtifact@2
   inputs:
     buildType: 'specific'
-    project: '32be4b0e-237f-430d-9289-c5966a5c9829'
-    definition: '3'
+    project: '7302639f-e704-47c3-9557-99b4e04a75bc'
+    definition: '281'
     buildVersionToDownload: 'latest'
     artifactName: 'passport-saml'
-    itemPattern: '**/s/passport-saml-1.2.0.tgz'
-    targetPath: '$(Pipeline.Workspace)/saml'
+    targetPath: '$(Pipeline.Workspace)/passport-saml'
+
 - task: DownloadPipelineArtifact@2
   inputs:
     buildType: 'specific'
-    project: '32be4b0e-237f-430d-9289-c5966a5c9829'
-    definition: '4'
+    project: '7302639f-e704-47c3-9557-99b4e04a75bc'
+    definition: '279'
     buildVersionToDownload: 'latest'
     artifactName: 'passport-openidconnect'
-    itemPattern: '**/s/passport-openidconnect-0.0.2.tgz'
-    targetPath: '$(Pipeline.Workspace)/openid'
+    targetPath: '$(Pipeline.Workspace)/passport-openidconnect'
 
 - script: |
     pwd
