@@ -68,7 +68,7 @@ steps:
       **package.json
       **package-lock.json
       **README.md
-      **server/*
+      **server/**
       **passport-version_4.0-node_modules.tar.gz
     TargetFolder: '$(Pipeline.Workspace)/package'
 
