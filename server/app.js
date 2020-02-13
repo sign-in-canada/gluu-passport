@@ -15,7 +15,6 @@ const
 	passportFile = '/etc/gluu/conf/passport-config.json'
 
 var httpServer, httpPort = -1
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 app.use(morgan('short', { stream: logger.logger.stream }))
 app.use(bodyParser.json())
