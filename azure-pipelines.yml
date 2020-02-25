@@ -53,9 +53,9 @@ steps:
 - script: |
     pwd
     ls -al
-    npm install $(Pipeline.Workspace)/saml/s/passport-saml-1.2.0.tgz
+    npm install $(Pipeline.Workspace)/passport-saml/s/passport-saml-1.2.0.tgz
     echo '***** saml instal executed ****'
-    npm install $(Pipeline.Workspace)/openid/s/passport-openidconnect-0.0.2.tgz
+    npm install $(Pipeline.Workspace)/passport-openidconnect/s/passport-openidconnect-0.0.2.tgz
     tar -czvf passport-version_4.0-node_modules.tar.gz node_modules
   displayName: 'Update packages'
   continueOnError: true
