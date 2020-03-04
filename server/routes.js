@@ -244,20 +244,43 @@ function callbackResponse(req, res) {
 
     res.set('content-type', 'text/html;charset=UTF-8')
     return res.status(200).send(`
-		<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
-			<body onload="document.forms[0].submit()">
+		<html xmlns="http://www.w3.org/1999/xhtml">
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.js"></script>
+		<script type="text/javascript">
+			function getLanguage() {
+				$.ajax({
+					url: 'https://dev-lang-tbs.fjgc-gccf.gc.ca/v1/lang',
+					type: 'GET',
+					contentType: 'application/json',
+					xhrFields: {
+						withCredentials: true
+					},
+					success: function (data) {
+						 document.forms[0].elements[1].value = data.lang.substring(0, 2) + "_CA";
+						 document.forms[0].submit();
+						 },
+					error: function (jqXHR, textStatus, errorThrown) { console.log(errorThrown); document.forms[0].submit() }
+				});
+			}
+		</script>
+			<body onload="getLanguage()">
 				<noscript>
 					<p>
 						<b>Note:</b> your browser does not support JavaScript, please press the Continue
 						button to proceed.
+					</p>
+					<p>
+						<b>Remarque:</b> votre navigateur ne prend pas en charge JavaScript, veuillez appuyer sur le bouton Continuer
+						pour continuer.
 					</p>
 				</noscript>
 
 				<form action="${postUrl}" method="post">
 					<div>
 						<input type="hidden" name="user" value="${jwt}"/>
+						<input id="ui_locale" name="ui_locale"/>
 						<noscript>
-							<input type="submit" value="Continue"/>
+							<input type="submit" value="Continue / Continuer"/>
 						</noscript>
 					</div>
 				</form>
