@@ -100,7 +100,7 @@ function init() {
 	//Start logging with basic params
     logger.configure({ level: basicConfig.logLevel, consoleLogOnly: basicConfig.consoleLogOnly })
 
-	let props = ['clientId', 'keyPath', 'keyId', 'keyAlg', 'configurationEndpoint', 'failureRedirectUrl']
+	let props = ['clientId', 'keyPath', 'keyId', 'keyAlg', 'configurationEndpoint', 'failureRedirectUrl', 'languageAPI']
 	if (misc.hasData(props, basicConfig)) {
 		global.basicConfig = basicConfig
 		//Try to gather the configuration
