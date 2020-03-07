@@ -274,11 +274,11 @@ function callbackResponse(req, res) {
 						pour continuer.
 					</p>
 				</noscript>
-
+				<img style='display:block;margin-left:auto;margin-right:auto;width:20%;padding:10% 0;' src='/oxauth/ext/resources/assets/icon_flag_rotation_080x080.gif'>
 				<form action="${postUrl}" method="post">
 					<div>
 						<input type="hidden" name="user" value="${jwt}"/>
-						<input id="ui_locale" name="ui_locale"/>
+						<input id="ui_locale" type="hidden" name="ui_locale"/>
 						<noscript>
 							<input type="submit" value="Continue / Continuer"/>
 						</noscript>
