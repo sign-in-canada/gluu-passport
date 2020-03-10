@@ -18,7 +18,7 @@ steps:
     publishRegistry: useFeed
     publishFeed: 'Sign in Canada/Sign_in_Canada'
 
-- script:
+- script: |
     tar -czvf passport-version_4.0-node_modules.tar.gz node_modules
   displayName: 'Package dependencies'
   continueOnError: true
@@ -26,7 +26,7 @@ steps:
 - task: CopyFiles@2
   inputs:
     SourceFolder: '$(Pipeline.Workspace)/s'
-    Contents:
+    Contents: |
       **LICENSE
       **package.json
       **package-lock.json
