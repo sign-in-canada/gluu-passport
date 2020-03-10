@@ -14,6 +14,6 @@ steps:
 
 - task: Npm@1
   inputs:
-    command: publish
+    command: install
     publishRegistry: useFeed
     publishFeed: 'Sign in Canada/Sign_in_Canada'
