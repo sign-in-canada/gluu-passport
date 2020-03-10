@@ -3,22 +3,6 @@
 # Add steps that analyze code, save build artifacts, deploy, and more:
 # https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
 
-resources:
- pipelines:
-   - pipeline: openidconnect
-     source: sign-in-canada.passport-openidconnect
-     trigger:
-      branches:
-      - master 
-   - pipeline: passportsaml
-     source: sign-in-canada.passport-saml
-     trigger:
-      branches:
-      - master
-
-trigger:
-- master
-
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -28,36 +12,15 @@ steps:
     versionSpec: '10.x'
   displayName: 'Install Node.js'
 
-- script: |
-    npm install
-  displayName: 'npm install and build'
-
-- task: DownloadPipelineArtifact@2
+- task: Npm@1
   inputs:
-    buildType: 'specific'
-    project: '7302639f-e704-47c3-9557-99b4e04a75bc'
-    definition: '283'
-    buildVersionToDownload: 'latest'
-    artifactName: 'passport-saml'
-    targetPath: '$(Pipeline.Workspace)/passport-saml'
-
-- task: DownloadPipelineArtifact@2
-  inputs:
-    buildType: 'specific'
-    project: '7302639f-e704-47c3-9557-99b4e04a75bc'
-    definition: '284'
-    buildVersionToDownload: 'latest'
-    artifactName: 'passport-openidconnect'
-    targetPath: '$(Pipeline.Workspace)/passport-openidconnect'
+    command: install
+    publishRegistry: useFeed
+    publishFeed: 'Sign in Canada/Sign_in_Canada'
 
 - script: |
-    pwd
-    ls -al
-    npm install $(Pipeline.Workspace)/passport-saml/s/passport-saml-1.2.0.tgz
-    echo '***** saml instal executed ****'
-    npm install $(Pipeline.Workspace)/passport-openidconnect/s/passport-openidconnect-0.0.2.tgz
     tar -czvf passport-version_4.0-node_modules.tar.gz node_modules
-  displayName: 'Update packages'
+  displayName: 'Package dependencies'
   continueOnError: true
 
 - task: CopyFiles@2
@@ -78,7 +41,7 @@ steps:
     pwd
     tar -czvf passport.tgz --exclude='*.tar.gz' package
     mv passport.tgz package
-  displayName: 'create tarball'
+  displayName: 'create application tarball'
   continueOnError: true
 
 - task: PublishPipelineArtifact@1
@@ -87,5 +50,3 @@ steps:
     artifact: 'gluu-passport'
     publishLocation: 'pipeline'
   condition: succeededOrFailed()
-
-
