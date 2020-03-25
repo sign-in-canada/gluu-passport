@@ -40,7 +40,7 @@ steps:
     echo 'packaging the files'
     cd $(Pipeline.Workspace)
     pwd
-    tar -czv --owner=node --group=node f $(Build.ArtifactStagingDirectory)/passport.tgz package
+    tar -czv --owner=node --group=node -f $(Build.ArtifactStagingDirectory)/passport.tgz package
   displayName: 'create application tarball'
   continueOnError: true
 
