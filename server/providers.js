@@ -52,7 +52,7 @@ function setupStrategy(prv) {
 	}
 
 	//Create strategy
-	if (moduleId == 'passport-saml') {
+	if (moduleId == 'sic-passport-saml') {
 
 		let	options = prv.options,
 			f = R.anyPass([R.isNil, R.isEmpty])
@@ -145,7 +145,7 @@ function fillMissingData(ps) {
 			callbackUrl = R.defaultTo(options.callbackUrl, options.callbackURL),
 			prefix = global.config.serverURI + '/passport/auth'
 
-		if (p.passportStrategyId == "passport-saml") {
+		if (p.passportStrategyId == "sic-passport-saml") {
 			//Different casing in saml
 			options.callbackUrl = R.defaultTo(`${prefix}/saml/${p.id}/callback`, callbackUrl)
 		} else {
@@ -168,9 +168,9 @@ function validProviders(ps) {
 			logger.log2('info', `Validating ${id}`)
 			let props = []
 
-			if (p.passportStrategyId == 'passport-saml') {
+			if (p.passportStrategyId == 'sic-passport-saml') {
 				props = ['cert']
-			} else if (p.passportStrategyId == 'passport-openidconnect') {
+			} else if (p.passportStrategyId == 'sic-passport-openidconnect') {
 				props = ['clientID', 'clientSecret', 'issuer', 'authorizationURL', 'tokenURL', 'userInfoURL']
 			} else if (p.passportStrategyId == 'passport-oxd'){
 				props = ['clientID', 'clientSecret', 'oxdID', 'issuer', 'oxdServer']
