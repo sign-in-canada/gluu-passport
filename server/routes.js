@@ -256,9 +256,11 @@ function callbackResponse(req, res) {
                                                 withCredentials: true
                                         },
                                         success: function (data) {
-                                                 document.forms[0].elements[1].value = data.lang.substring(0, 2) + "_CA";
-                                                 document.forms[0].submit();
-                                                 },
+                                                var lang =  data.lang.substring(0, 2);
+                                                document.forms[0].action = document.forms[0].action + '?ui_locale=' + lang;
+                                                document.forms[0].elements[1].value = lang;
+                                                document.forms[0].submit();
+                                                },
                                         error: function (jqXHR, textStatus, errorThrown) { console.log(errorThrown); document.forms[0].submit() }
                                 });
                         }
