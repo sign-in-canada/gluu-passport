@@ -3,6 +3,8 @@
 # Add steps that analyze code, save build artifacts, deploy, and more:
 # https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
 
+trigger: none
+
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -32,14 +34,13 @@ steps:
       **package-lock.json
       **README.md
       **server/**
-      **passport-version_4.0-node_modules.tar.gz
     TargetFolder: '$(Pipeline.Workspace)/package'
 
 - script: |
     echo 'packaging the files'
     cd $(Pipeline.Workspace)
     pwd
-    tar -czvf passport.tgz --exclude='*.tar.gz' package
+    tar -czvf passport.tgz package
     mv passport.tgz package
   displayName: 'create application tarball'
   continueOnError: true
