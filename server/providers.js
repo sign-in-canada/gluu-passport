@@ -49,7 +49,7 @@ function getVerifyFunction(prv) {
 		//except for passport-openidconnect which does not follow this convention
 		let profile, additional
 
-		if (prv.passportStrategyId == 'passport-openidconnect') {
+		if (prv.passportStrategyId == 'sic-passport-openidconnect') {
 			//Check passport-openidconnect/lib/strategy.js
 			let index = prv.options.passReqToCallback ? 1 : 0
 
@@ -120,7 +120,7 @@ function setupStrategy(prv) {
 					"sessionIndex": profile.sessionIndex
 				}
 
-				processProfile(prv, profile, cb, { provider: id, getAssertionXml: profile.getAssertionXml })
+				verify(req, profile, cb)
 			}
 		)
 		passport.use(id, samlStrategy)
@@ -188,7 +188,7 @@ function fillMissingData(ps) {
 	for (let p of ps) {
 		let options = p.options,
 			strategyId = p.passportStrategyId,
-			isSaml = strategyId == "passport-saml",
+			isSaml = strategyId == "sic-passport-saml",
 			callbackUrl = R.defaultTo(options.callbackUrl, options.callbackURL),
 			prefix = global.config.serverURI + '/passport/auth'
 

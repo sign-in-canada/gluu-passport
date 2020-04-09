@@ -9,6 +9,7 @@ const
 const params = R.once(() => [
 	{
 		strategy: 'sic-passport-saml',
+		verifyCallbackArity: 3,
 		passportAuthnParams: {},
 		options: {
 			passReqToCallback: true,
