@@ -230,15 +230,15 @@ function callbackResponse(req, res) {
         user.provider = provider
 
     let now = new Date().getTime(),
-        jwt = misc.getRpJWT({
-                                iss: postUrl,
-                                sub: sub,
-                                aud: global.basicConfig.clientId,
-                                jti: uuid(),
-                                exp: now / 1000 + 30,
-                                iat: now,
-                                data: user
-                })
+    	jwt = misc.getRpJWT({
+				iss: postUrl,
+				sub: sub,
+				aud: global.basicConfig.clientId,
+				jti: uuid(),
+				exp: now / 1000 + 30,
+				iat: now,
+				data: misc.encrypt(user)
+    		})
 
     logger.log2('debug', `Sending user data ${jwt} to: ${postUrl}`)
 
