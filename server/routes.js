@@ -300,8 +300,8 @@ function processLogout(req, res) {
                 logger.log2('debug', 'logout callback ' + JSON.stringify(err) + ' ' + JSON.stringify(profile) + ' ' + loggedOut)
 
                 if (err) {
-                        logger.log2('error', err.stack)
-                        res.status(400).send('Invalid SAML request') // TODO: Redirect to logout error UI page
+                        logger.log2('error', err.stack) // Parrial or failed Logout
+                        res.send(JSON.stringify(err))
                 } else if (profile) { // Logout Request
                         if (req.session && req.session.authenticating) {
                                 req.samlLogoutRequest = profile
