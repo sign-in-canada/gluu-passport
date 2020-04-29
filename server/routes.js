@@ -156,6 +156,7 @@ function validateProvider(req, res, next) {
 
 function authenticateRequest(req, res, next) {
         logger.log2('verbose', `Authenticating request against ${req.params.provider}`)
+        req.session.authenticating = true
         passport.authenticate(req.params.provider, req.passportAuthenticateParams)(req, res, next)
 }
 
@@ -218,6 +219,7 @@ function callbackResponse(req, res) {
         let provider = user.provider,
                 sub = user.uid
     logger.log2('info', `User ${sub} authenticated with provider ${provider}`)
+    req.session.authenticating = false
 
         if (req.cookies['casa-' + provider]) {
                 postUrl = '/casa/rest/pl/account-linking/idp-linking/' + provider
@@ -301,9 +303,20 @@ function processLogout(req, res) {
                         logger.log2('error', err.stack)
                         res.status(400).send('Invalid SAML request') // TODO: Redirect to logout error UI page
                 } else if (profile) { // Logout Request
-                        req.user.logoutRequest = profile
-                        const redirectUri = encodeURIComponent('https://' + req.hostname + '/passport/logout/response')
-                        res.redirect('/oxauth/restv1/end_session?post_logout_redirect_uri=' + redirectUri)
+                        if (req.session && req.session.authenticating) {
+                                req.samlLogoutRequest = profile
+                                strategy._saml.getLogoutResponseUrl(req, {}, (err, url) => {
+                                        if (err) {
+                                                handleError(req, res, err.message)
+                                        } else {
+                                                res.redirect(url)
+                                        }
+                                })
+                        } else {
+                                req.user.logoutRequest = profile
+                                const redirectUri = encodeURIComponent('https://' + req.hostname + '/passport/logout/response')
+                                res.redirect('/oxauth/restv1/end_session?post_logout_redirect_uri=' + redirectUri)
+                        }
                 } else { // Logout Response
                         res.send("Success")
                 }
