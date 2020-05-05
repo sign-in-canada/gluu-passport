@@ -16,6 +16,7 @@ const
 
 var httpServer, httpPort = -1
 
+app.set('trust proxy', 'loopback')
 app.use(morgan('short', { stream: logger.logger.stream }))
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: false }))
@@ -23,12 +24,14 @@ app.use(cookieParser())
 
 app.use(session({
     cookie: {
-        maxAge: 86400000
+		secure: true,
+		path: '/passport',
+		sameSite: 'strict'
     },
     store: new MemoryStore({
         checkPeriod: 86400000 // prune expired entries every 24h
     }),
-    secret: 'wtf',
+    secret: misc.secretKey,
     resave: false,
     saveUninitialized: false
 }))

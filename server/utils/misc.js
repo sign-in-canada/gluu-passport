@@ -101,5 +101,6 @@ module.exports = {
 	getRpJWT: getRpJWT,
 	getJWT: getJWT,
 	verifyJWT: verifyJWT,
-	encrypt: encrypt
+	encrypt: encrypt,
+	secretKey: secretKey
 }
