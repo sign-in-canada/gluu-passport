@@ -26,7 +26,7 @@ app.use(session({
     cookie: {
 		secure: true,
 		path: '/passport',
-		sameSite: 'strict'
+		sameSite: 'none'
     },
     store: new MemoryStore({
         checkPeriod: 86400000 // prune expired entries every 24h
