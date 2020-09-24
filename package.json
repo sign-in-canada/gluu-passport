@@ -7,7 +7,7 @@
     },
     "dependencies": {
         "@sokratis/passport-linkedin-oauth2": "^2.1.0",
-        "applicationinsights": "^1.6.0",
+        "applicationinsights": "^1.8.7",
         "bluebird": "^3.5.3",
         "body-parser": "^1.18.3",
         "connect-couchbase": "^0.2.10",
