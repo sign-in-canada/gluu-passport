@@ -16,9 +16,9 @@ steps:
 
 - task: Npm@1
   inputs:
-    command: install
+    command: publish
     publishRegistry: useFeed
-    publishFeed: 'Sign in Canada/Sign_in_Canada'
+    publishFeed: 'Sign in Canada/SignInCanada'
 
 - script: |
     tar -czvf $(Build.ArtifactStagingDirectory)/passport-version_4.1.0-node_modules.tar.gz node_modules
