@@ -8,7 +8,7 @@ const
 //This is wrapped in a function so params is not evaluated upon module load, only at first usage
 const params = R.once(() => [
 	{
-		strategy: 'sic-passport-saml',
+		strategy: '@sic/passport-saml',
 		verifyCallbackArity: 3,
 		passportAuthnParams: {},
 		options: {
