@@ -41,7 +41,7 @@ const defaultRpOptions = R.once(() => ({
 			}))
 
 const secretKey = R.once(() => {
-							let salt = fs.readFileSync("/etc/gluu/conf/salt", 'utf8')
+							let salt = fs.readFileSync(process.env.GLUU_SALT || "/etc/gluu/conf/salt", 'utf8')
 							return /=\s*(\S+)/.exec(salt)[1]
 						})
 

@@ -17,7 +17,7 @@ const params = R.once(() => [
 			requestIdExpirationPeriodMs: 3600000,
 			decryptionPvk: fs.readFileSync(global.config.spTLSKey, 'utf-8'),
 			decryptionCert: fs.readFileSync(global.config.spTLSCert, 'utf-8'),
-			privateCert: fs.readFileSync("/etc/certs/passport-sp.key", 'utf-8')
+			privateCert: fs.readFileSync(process.env.PRIVATE_CERT || "/etc/certs/passport-sp.key", 'utf-8')
 		}
 	},
 	{

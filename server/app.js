@@ -12,9 +12,16 @@ const
 	confDiscovery = require('./utils/configDiscovery'),
 	routes = require('./routes'),
 	providers = require('./providers'),
-	passportFile = '/etc/gluu/conf/passport-config.json'
+	passportFile = process.env.PASSPORT_FILE || '/etc/gluu/conf/passport-config.json'
 
 var httpServer, httpPort = -1
+
+const appInsightsKey = process.env.APPINSIGHTS_INSTRUMENTATIONKEY;
+
+if (appInsightsKey) {
+	const appInsights = require('applicationinsights');
+	appInsights.setup(appInsightsKey).start();
+}
 
 app.set('trust proxy', 'loopback')
 app.use(morgan('short', { stream: logger.logger.stream }))
