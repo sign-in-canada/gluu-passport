@@ -47,7 +47,13 @@ router.get('/logout/request', (req, res, next) => {
                 res.status(400).send('No Session')
         } else {
                 const provider = req.user.provider
-                const strategy = passport._strategy(provider)
+                var strategy = passport._strategy(provider)
+
+                // MFA exception: second retry using session provider which should be set in callbackResponse 
+                if (strategy.name != 'saml') {
+                        strategy = passport._strategy(req.session.provider)
+                }
+                
                 if (strategy.name === 'saml' && strategy._saml.options.logoutUrl && !req.user.logoutRequest) {
                         const relayState = req.query && req.query.post_logout_redirect_uri
                         if (relayState) {
@@ -75,7 +81,13 @@ router.get('/logout/response/:status?', (req, res, next) => {
                 res.status(400).send('No Session')
         } else {
                 const provider = req.user.provider
-                const strategy = passport._strategy(provider)
+                var strategy = passport._strategy(provider)
+
+                // MFA exception: second retry using session provider which should be set in callbackResponse 
+                if (strategy.name != 'saml') {
+                        strategy = passport._strategy(req.session.provider)
+                }
+                
                 if (req.user.logoutRequest) {
                         logger.log2('verbose', 'Sending SAML logout response to provider ' + provider)
                         req.samlLogoutRequest = req.user.logoutRequest
@@ -230,6 +242,9 @@ function callbackResponse(req, res) {
         //Apply transformation to user object and restore original provider value
         user = misc.arrify(user)
         user.provider = provider
+
+        // Save the current provider in case of 2FA (saving the first provider)
+        if (!req.session.provider) req.session.provider = provider
 
     let now = new Date().getTime(),
     	jwt = misc.getRpJWT({
