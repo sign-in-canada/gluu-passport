@@ -1,4 +1,5 @@
 const
+	appInsights = require('applicationinsights'),
 	server = require('http'),
 	app = require('express')(),
 	session = require('express-session'),
@@ -19,8 +20,9 @@ var httpServer, httpPort = -1
 const appInsightsKey = process.env.APPINSIGHTS_INSTRUMENTATIONKEY;
 
 if (appInsightsKey) {
-	const appInsights = require('applicationinsights');
-	appInsights.setup(appInsightsKey).start();
+	appInsights.setup(appInsightsKey)
+	appInsights.defaultClient.context.tags[appInsights.defaultClient.context.keys.cloudRole] = "Passport"
+	appInsights.start()
 }
 
 app.set('trust proxy', 'loopback')
