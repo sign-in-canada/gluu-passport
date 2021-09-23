@@ -1,126 +1,108 @@
-const
-	appInsights = require('applicationinsights'),
-	server = require('http'),
-	app = require('express')(),
-	session = require('express-session'),
-	MemoryStore = require('memorystore')(session),
-	bodyParser = require('body-parser'),
-	cookieParser = require('cookie-parser'),
-	passport = require('passport'),
-	morgan = require('morgan'),
-	logger = require('./utils/logging'),
-	misc = require('./utils/misc'),
-	confDiscovery = require('./utils/configDiscovery'),
-	routes = require('./routes'),
-	providers = require('./providers'),
-	passportFile = process.env.PASSPORT_FILE || '/etc/gluu/conf/passport-config.json'
+const appInsights = require('applicationinsights')
+const config = require('config')
+const logger = require('./utils/logging')
+const misc = require('./utils/misc')
+const confDiscovery = require('./utils/configDiscovery')
+const providers = require('./providers')
+const passportFile = config.get('passportFile')
+const AppFactory = require('./app-factory')
 
-var httpServer, httpPort = -1
+let httpServer
+let httpPort = -1
 
-const appInsightsKey = process.env.APPINSIGHTS_INSTRUMENTATIONKEY;
+const appInsightsKey = config.get('appInsightsKey')
 
 if (appInsightsKey) {
 	appInsights.setup(appInsightsKey)
-	appInsights.defaultClient.context.tags[appInsights.defaultClient.context.keys.cloudRole] = "Passport"
-	appInsights.start()
+  appInsights.defaultClient.context.tags[appInsights.defaultClient.context.keys.cloudRole] = "Passport"
+  appInsights.start()
 }
 
-app.set('trust proxy', 'loopback')
-app.use(morgan('short', { stream: logger.logger.stream }))
-app.use(bodyParser.json())
-app.use(bodyParser.urlencoded({ extended: false }))
-app.use(cookieParser())
+const appFactoryInstance = new AppFactory()
+const app = appFactoryInstance.createApp()
 
-app.use(session({
-    cookie: {
-		secure: true,
-		path: '/passport',
-		sameSite: 'none'
-    },
-    store: new MemoryStore({
-        checkPeriod: 86400000 // prune expired entries every 24h
-    }),
-    secret: misc.secretKey(),
-    resave: false,
-    saveUninitialized: false
-}))
+/**
+ * Creates express server for the first time and recreates if port changed
+ * @param serverURI - server host and uri
+ * @param port - port to create server
+ */
+function recreateHttpServer (serverURI, port) {
+  logger.log2('debug',
+    `entered recreateHttpServer(serverURI=${serverURI},port=${port}`)
+  logger.log2('debug', `httpPort = ${httpPort}`)
 
-app.use(passport.initialize())
-app.use(passport.session())
-app.use('/passport', routes)
+  // Closes and creates a new server if port has changed
+  // after configuration file fetched, it will also change to 8090
+  if (httpPort !== port) {
+    httpPort = port
 
-//Default error handler
-app.use((err, req, res, next) => {
-	logger.log2('error', `Unknown Error: ${err}`)
-	logger.log2('error', err.stack)
-	res.redirect(`${global.basicConfig.failureRedirectUrl}?failure=An error occurred`)
-})
-
-passport.serializeUser((user, done) => {
-    done(null, user)
-})
-
-passport.deserializeUser((user, done) => {
-    done(null, user)
-})
-
-
-function recreateHttpServer(serverURI, port) {
-
-	//Closes and creates a new server if port has changed
-	if (httpPort != port) {
-		httpPort = port
-
-		if (httpServer) {
-			httpServer.close(() => logger.log2('info', 'Server stopped accepting connections'))
-		}
-		httpServer = server.createServer(app)
-		httpServer.listen(port, () => {
-			logger.log2('info', `Server listening on ${serverURI}:${port}`)
-			console.log(`Server listening on ${serverURI}:${port}`)
-		})
-	}
-
+    if (httpServer) {
+      httpServer.close(() => logger.log2(
+        'info', 'Server stopped accepting connections')
+      )
+    }
+    httpServer = app.listen(port, () => {
+      logger.log2('info', `Server listening on ${serverURI}:${port}`)
+      console.log(`Server listening on ${serverURI}:${port}`)
+      app.emit('appStarted') // event emitter for tests
+    })
+    module.exports = httpServer
+  }
 }
 
-function reconfigure(cfg) {
+function reconfigure (cfg) {
+  global.config = cfg.conf
+  global.iiconfig = cfg.idpInitiated
 
-	global.config = cfg.conf
-	global.iiconfig = cfg.idpInitiated
-
-	//Apply all runtime configuration changes
-	logger.configure(cfg.conf.logging)
-	providers.setup(cfg.providers)
-	recreateHttpServer(cfg.conf.serverURI, cfg.conf.serverWebPort)
-
+  // Apply all runtime configuration changes
+  logger.configure(cfg.conf.logging)
+  providers.setup(cfg.providers)
+  recreateHttpServer(cfg.conf.serverURI, cfg.conf.serverWebPort)
 }
 
-function pollConfiguration(configEndpoint) {
-	misc.pipePromise(confDiscovery.retrieve, reconfigure)(configEndpoint)
-			.catch(e => {
-				logger.log2('error', e.toString())
-				logger.log2('debug', e.stack)
-				logger.log2('warn', 'An attempt to get configuration data will be tried again soon')
-			})
-	setTimeout(pollConfiguration, 60000, configEndpoint)	 //1 minute timer
+function pollConfiguration (configEndpoint) {
+  misc.pipePromise(confDiscovery.retrieve, reconfigure)(configEndpoint)
+    .catch(e => {
+      logger.log2('error', e.toString())
+      logger.log2('debug', e.stack)
+      logger.log2(
+        'warn', 'An attempt to get configuration data ' +
+        'will be tried again soon')
+    })
+  setTimeout(
+    pollConfiguration, config.get('timerInterval'), configEndpoint
+  )
+  // 1 minute timer
 }
 
-function init() {
+function init () {
+  // Read the minimal params to start
+  const basicConfig = require(passportFile)
+  // Start logging with basic params
+  logger.configure(
+    {
+      level: basicConfig.logLevel,
+      consoleLogOnly: basicConfig.consoleLogOnly
+    })
 
-	//Read the minimal params to start
-	let basicConfig = require(passportFile)
-	//Start logging with basic params
-    logger.configure({ level: basicConfig.logLevel, consoleLogOnly: basicConfig.consoleLogOnly })
-
-	let props = ['clientId', 'keyPath', 'keyId', 'keyAlg', 'configurationEndpoint', 'failureRedirectUrl', 'languageAPI']
-	if (misc.hasData(props, basicConfig)) {
-		global.basicConfig = basicConfig
-		//Try to gather the configuration
-		pollConfiguration(basicConfig.configurationEndpoint)
-	} else {
-		logger.log2('error', 'passport-config file is missing data')
-	}
-
+  const props = [
+    'clientId',
+    'keyPath',
+    'keyId',
+    'keyAlg',
+    'configurationEndpoint',
+    'failureRedirectUrl',
+    'languageAPI'
+  ]
+  if (misc.hasData(props, basicConfig)) {
+    global.basicConfig = basicConfig
+    // Try to gather the configuration
+    pollConfiguration(basicConfig.configurationEndpoint)
+  } else {
+    logger.log2('error', 'passport-config file is missing data')
+  }
 }
+
+module.exports = app
 
 init()

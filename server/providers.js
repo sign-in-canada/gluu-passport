@@ -1,242 +1,289 @@
-const
-	passport = require('passport'),
-	R = require('ramda'),
-	meta = require('./sp-meta'),
-	misc = require('./utils/misc'),
-	logger = require('./utils/logging'),
-	pparams = require('./extra-passport-params'),
-	cacheProvider = require('./cache-provider')
+const passport = require('passport')
+const R = require('ramda')
+const spMetadata = require('./sp-meta')
+const misc = require('./utils/misc')
+const logger = require('./utils/logging')
+const extraPassportParams = require('./extra-passport-params')
+const cacheProvider = require('./cache-provider')
 
-var prevConfigHash = 0
+let prevConfigHash = 0
 
-//These are the (node) strategies loaded so far: [{id: "...", strategy: ...}, ... ]
-var passportStrategies = []
+// These are the (node) strategies loaded so far: [{id: "...", Strategy: ...}, ... ]
+const passportStrategies = []
 
-function processProfile(provider, additionalParams, profile, done, extra) {
+function applyMapping (profile, provider) {
+  let mappedProfile
+  try {
+    const mapping = global.providers.find(
+      providerObj => providerObj.id === provider).mapping
 
-	let mappedProfile
-	try {
-		let mapping = provider.mapping
-		logger.log2('silly', `Raw profile is ${JSON.stringify(profile._json)}`)
-		logger.log2('info', `Applying mapping '${mapping}' to profile`)
+    const additionalParams = profile.extras
 
-		mappedProfile = require('./mappings/' + mapping)(profile, additionalParams)
-		mappedProfile = R.mergeLeft(mappedProfile, extra)
-	} catch (err) {
-		logger.log2('error', `An error occurred: ${err}`)
-		mappedProfile = {}
-	}
-	logger.log2('debug', `Resulting profile data is\n${JSON.stringify(mappedProfile, null, 4)}`)
-	return done(null, mappedProfile)
+    delete profile.extras
+    logger.log2('silly', `Raw profile is ${JSON.stringify(profile._json)}`)
+    logger.log2('info', `Applying mapping '${mapping}' to profile`)
 
+    mappedProfile = require('./mappings/' + mapping)(profile, additionalParams)
+    logger.log2('debug', `Resulting profile data is\n${JSON.stringify(mappedProfile, null, 4)}`)
+  } catch (err) {
+    logger.log2('error', `An error occurred: ${err}`)
+  }
+  return mappedProfile
 }
 
-function getVerifyFunction(prv) {
+function getVerifyFunction (provider) {
+  const arity = provider.verifyCallbackArity
 
-	let arity = prv.verifyCallbackArity,
-		extraParams = (provider, profile) => {
-							let data = { provider: provider }
-							if (profile.getAssertionXml) {
-								//this property is attached so idp-initiated code can parse the SAML assertion,
-								//however it is removed from the profile sent to oxauth afterwards (see misc.arrify)
-								data.getAssertionXml = profile.getAssertionXml
-							}
-							return data
-						}
+  const uncurried = (...args) => {
+    // profile and callback are the last 2 params in all passport verify functions,
+    // except for passport-openidconnect which does not follow this convention
+    let profile, extras
 
-	let uncurried = (...args) => {
-		//profile and callback are the last 2 params in all passport verify functions,
-		//except for passport-openidconnect which does not follow this convention
-		let profile, additional
+    if (provider.passportStrategyId === '@sic/passport-openidconnect') {
+      // Check passport-openidconnect/lib/strategy.js
+      const index = provider.options.passReqToCallback ? 1 : 0
 
-		if (prv.passportStrategyId == '@sic/passport-openidconnect') {
-			//Check passport-openidconnect/lib/strategy.js
-			let index = prv.options.passReqToCallback ? 1 : 0
+      profile = args[2 + index]
+      extras = args.slice(0, 2 + index)
+      extras = extras.concat(args.slice(3 + index, arity - 1))
+    } else {
+      profile = args[arity - 2]
+      extras = args.slice(0, arity - 2)
+    }
+    const cb = args[arity - 1]
+    profile.providerKey = provider.id
+    profile.extras = extras
 
-			profile = args[2 + index]
-			additional = args.slice(0, 2 + index)
-			additional = additional.concat(args.slice(3 + index, arity - 1))
-		} else {
-			profile = args[arity - 2]
-			additional = args.slice(0, arity - 2)
-		}
+    return cb(null, profile)
+  }
 
-		profile.providerKey = prv.id
-		return processProfile(prv, additional, profile, args[arity - 1], extraParams(prv.id, profile))
-	}
-	//guarantee the function has the arity required
-	return R.curryN(arity, uncurried)
-
+  // guarantee the function has the arity required
+  return R.curryN(arity, uncurried)
 }
 
-function setupStrategy(prv) {
+function setupStrategy (provider) {
+  logger.log2('info', `Setting up strategy for provider ${provider.displayName}`)
+  logger.log2('debug', `Provider data is\n${JSON.stringify(provider, null, 4)}`)
 
-	logger.log2('info', `Setting up strategy for provider ${prv.displayName}`)
-	logger.log2('debug', `Provider data is\n${JSON.stringify(prv, null, 4)}`)
+  const id = provider.id
+  const strategyModule = provider.passportStrategyId
 
-	let id = prv.id,
-		moduleId = prv.passportStrategyId,
-		strategy = R.find(R.propEq('id', id), passportStrategies)
+  let Strategy = passportStrategies.find(strategy => strategy.id === id)
 
-	//if module is not found, load it
-	if (strategy) {
-		strategy = strategy.strategy
-	} else {
-		logger.log2('info', `Loading node module ${moduleId}`)
-		strategy = require(moduleId)
-		strategy = (prv.type == 'oauth' && strategy.OAuth2Strategy) ? strategy.OAuth2Strategy : strategy.Strategy
+  // if strategyModule is not found, load it
+  if (Strategy) {
+    Strategy = Strategy.Strategy
+  } else {
+    logger.log2('info', `Loading node strategy module ${strategyModule}`)
+    Strategy = require(strategyModule)
 
-		logger.log2('verbose', 'Adding to list of known strategies')
-		passportStrategies.push({ id: id, strategy: strategy })
-	}
+    if (provider.type === 'oauth' && Strategy.OAuth2Strategy) {
+      Strategy = Strategy.OAuth2Strategy
+    } else if (provider.type === 'saml') {
+      Strategy = Strategy.MultiSamlStrategy
+    } else {
+      Strategy = Strategy.Strategy
+    }
 
-	let options = prv.options,
-		isSaml = moduleId == '@sic/passport-saml',
-		verify = getVerifyFunction(prv)
+    logger.log2('verbose', 'Adding to list of known strategies')
+    passportStrategies.push({ id, Strategy })
+  }
 
-	//Create strategy
-	if (isSaml) {
-		let	f = R.anyPass([R.isNil, R.isEmpty])
+  const providerOptions = provider.options
+  const isSaml = strategyModule === '@sic/passport-saml'
+  const verify = getVerifyFunction(provider)
 
-		//Instantiate custom cache provider if required
-		if (options.validateInResponseTo) {
-			let exp = options.requestIdExpirationPeriodMs / 1000
+  // Create strategy
+  if (isSaml) {
+    // Turn off inResponseTo validation if the IDP is configured for IDP-initiated:
+    // "an IDP would never do both IDP initiated and SP initiated..."
+    if (global.iiconfig.authorizationParams.find(
+      authorizationParam => authorizationParam.provider === id)) {
+      providerOptions.validateInResponseTo = false
+    }
 
-			if (!f(options.redisCacheOptions)) {
-				options.cacheProvider = cacheProvider.get('redis', options.redisCacheOptions, exp)
-			} else if (!f(options.memcachedCacheOptions)) {
-				options.cacheProvider = cacheProvider.get('memcached', options.memcachedCacheOptions, exp)
-			}
-		}
-		let samlStrategy = new strategy(
-			options,
-			(req, profile, cb) => {
-				// Stash the SAML subject & SessionIndex for future logout
-				req.session.samlSubject = {
-					"nameIDFormat": profile.nameIDFormat,
-					"nameQualifier": profile.nameQualifier,
-					"spNameQualifier": profile.spNameQualifier,
-					"nameID": profile.nameID,
-					"sessionIndex": profile.sessionIndex
-				}
+    // Instantiate custom cache provider if required
+    if (providerOptions.validateInResponseTo) {
+      const f = R.anyPass([R.isNil, R.isEmpty])
+      const exp = providerOptions.requestIdExpirationPeriodMs / 1000
 
-				verify(req, profile, cb)
-			}
-		)
-		passport.use(id, samlStrategy)
-		meta.generate(prv, samlStrategy)
+      if (!f(providerOptions.redisCacheOptions)) {
+        providerOptions.cacheProvider = cacheProvider.get(
+          'redis', providerOptions.redisCacheOptions, exp
+        )
+      } else if (!f(providerOptions.memcachedCacheOptions)) {
+        providerOptions.cacheProvider = cacheProvider.get(
+          'memcached', providerOptions.memcachedCacheOptions, exp
+        )
+      }
+    }
 
-	} else {
-		passport.use(id, new strategy(options, verify))
-	}
+    const samlStrategy = new Strategy(
+      providerOptions,
+      (req, profile, cb) => {
+        // Stash the SAML subject & SessionIndex for future logout
+        req.session.samlSubject = {
+          'nameIDFormat': profile.nameIDFormat,
+          'nameQualifier': profile.nameQualifier,
+          'spNameQualifier': profile.spNameQualifier,
+          'nameID': profile.nameID,
+          'sessionIndex': profile.sessionIndex
+        }
+        verify(req, profile, cb)
+      }
+    )
 
+    passport.use(id, samlStrategy)
+    spMetadata.generate(provider, samlStrategy)
+  } else {
+    passport.use(id, new Strategy(providerOptions, verify))
+  }
 }
 
-function parseProp(value) {
+function parseProp (value) {
+  try {
+    if (typeof value === 'string') {
+      value = JSON.parse(value)
+    }
+  } catch (err) {
+    // not an error. For datatypes other than string,
+    // the original parameter value is returned
 
-	try {
-		if (typeof value == 'string') {
-			value = JSON.parse(value)
-		}
-	} catch (e) {
-	}
-	return value
-
+  }
+  return value
 }
 
-function fixDataTypes(ps) {
+/**
+* @TODO refactor ramda to native
+*/
+function fixDataTypes (providers) {
+  for (const provider of providers) {
+    // The subproperties of provider's options potentially come from the server as strings, they should
+    // be converted to other types if possible
+    let value = provider.options
 
-	for (let p of ps) {
-		//The subproperties of provider's options potentially come from the server as strings, they should
-		//be converted to other types if possible
-		let prop = 'options', value = p[prop]
+    if (misc.isObject(value)) {
+      R.forEach((key) => {
+        value[key] = parseProp(value[key])
+      }, R.keys(value))
+    } else {
+      logger.log2(
+        'warn', `Object expected for property options, found ${JSON.stringify(value)}`
+      )
+      value = {}
+    }
+    provider.options = value
 
-		if (misc.isObject(value)) {
-			R.forEach(key => value[key] = parseProp(value[key]), R.keys(value))
-		} else {
-			logger.log2('warn', `Object expected for property ${prop}, found ${JSON.stringify(value)}`)
-			value = {}
-		}
-		p[prop] = value
-
-		//Tries to convert passportAuthnParams to a dictionary, otherwise {} is left
-		prop = 'passportAuthnParams'
-		value = parseProp(p[prop])
-		if (!misc.isObject(value)) {
-			//log message only if passportAuthnParams is not absent
-			if (!R.isNil(value)) {
-				logger.log2('warn', `Parsable object expected for property ${prop}, found ${JSON.stringify(value)}`)
-			}
-			value = {}
-		}
-		p[prop] = value
-	}
-
+    // Tries to convert passportAuthnParams to a dictionary, otherwise {} is left
+    value = parseProp(provider.passportAuthnParams)
+    if (!misc.isObject(value)) {
+      // log message only if passportAuthnParams is not absent
+      if (!R.isNil(value)) {
+        logger.log2(
+          'warn', `Parsable object expected for property passportAuthnParams, found ${JSON.stringify(value)}`
+        )
+      }
+      value = {}
+    }
+    provider.passportAuthnParams = value
+  }
 }
 
-function mergeProperty(strategyId, obj, prop) {
-	let extraParams = pparams.get(strategyId, prop)
-	return R.mergeLeft(obj[prop], extraParams)
+function mergeProperty (strategyId, obj, property) {
+  const extraParams = extraPassportParams.get(strategyId, property)
+  return R.mergeLeft(obj[property], extraParams)
 }
 
-function fillMissingData(ps) {
+function fillMissingData (providers) {
+  const paramsToFill = ['passportAuthnParams', 'options']
 
-	let paramsToFill = ['passportAuthnParams', 'options']
+  // eslint-disable-next-line no-return-assign
+  R.forEach(provider => R.forEach(prop => provider[prop] = mergeProperty(
+    provider.passportStrategyId, provider, prop), paramsToFill), providers)
 
-	R.forEach(p => R.forEach(prop => p[prop] = mergeProperty(p.passportStrategyId, p, prop), paramsToFill), ps)
+  for (const provider of providers) {
+    const options = provider.options
+    const strategyId = provider.passportStrategyId
+    const isSaml = strategyId === '@sic/passport-saml'
+    const callbackUrl = R.defaultTo(options.callbackUrl, options.callbackURL)
+    const prefix = global.config.serverURI + '/passport/auth'
 
-	for (let p of ps) {
-		let options = p.options,
-			strategyId = p.passportStrategyId,
-			isSaml = strategyId == "@sic/passport-saml",
-			callbackUrl = R.defaultTo(options.callbackUrl, options.callbackURL),
-			prefix = global.config.serverURI + '/passport/auth'
+    if (isSaml) {
+      // Different casing in saml
+      options.callbackUrl = R.defaultTo(`${prefix}/saml/${provider.id}/callback`, callbackUrl)
+    } else {
+      options.callbackURL = R.defaultTo(`${prefix}/${provider.id}/callback`, callbackUrl)
+      // Some passport strategies expect consumer* instead of client*
+      options.consumerKey = options.clientID
+      options.consumerSecret = options.clientSecret
+      // Allow state validation in passport-oauth2 based strategies
+      options.state = true
+    }
 
-		if (isSaml) {
-			//Different casing in saml
-			options.callbackUrl = R.defaultTo(`${prefix}/saml/${p.id}/callback`, callbackUrl)
-		} else {
-			options.callbackURL = R.defaultTo(`${prefix}/${p.id}/callback`, callbackUrl)
-			//Some passport strategies expect consumer* instead of client*
-			options.consumerKey = options.clientID
-			options.consumerSecret = options.clientSecret
-		}
+    // Strategies with "special" treatments
+    if (strategyId.indexOf('passport-apple') >= 0 && options.key) {
+      // Smells like apple...
+      try {
+        // @TODO: we have to make the UI fields multiline so they can paste the contents and avoid this
+        options.key = require('fs').readFileSync(options.key, 'utf8')
+      } catch (e) {
+        logger.log2('warn', `There was a problem reading file ${options.key}. Ensure the file exists and is readable`)
+        logger.log2('error', e.stack)
+        options.key = ''
+      }
+    }
 
-		//Fills verifyCallbackArity (number expected)
-		let prop = 'verifyCallbackArity',
-			value = pparams.get(strategyId, prop),
-			toadd = options.passReqToCallback ? 1 : 0
+    // Fills verifyCallbackArity (number expected)
+    const value = extraPassportParams.get(strategyId, 'verifyCallbackArity')
+    let toadd
+    if (options.passReqToCallback) {
+      toadd = 1
+    } else {
+      toadd = 0
+    }
 
-		//In most passport strategies the verify callback has arity 4 except for saml
-		p[prop] = (typeof value == 'number') ? value : (toadd + (isSaml ? 2 : 4))
-	}
-
+    // In most passport strategies the verify callback has arity 4 except for saml
+    if (typeof value === 'number') {
+      provider.verifyCallbackArity = value
+    } else {
+      let arity
+      if (isSaml) {
+        arity = 2
+      } else {
+        arity = 4
+      }
+      provider.verifyCallbackArity = toadd + arity
+    }
+  }
 }
 
-function setup(ps) {
+/**
+ * Setup providers and sets global `providers`
+ * @param providers : Object containing providers (fetched from config endpoint)
+ * @TODO refactor function name to setupProviders
+ */
+function setup (providers) {
+  providers = R.defaultTo([], providers)
+  const hashConfig = misc.hash(providers)
+  if (hashConfig !== prevConfigHash) {
+    // Only makes recomputations if config data changed
+    logger.log2('info', 'Reconfiguring providers')
 
-	ps = R.defaultTo([], ps)
-	let h = misc.hash(ps)
-	if (h != prevConfigHash) {
-		//Only makes recomputations if config data changed
-		logger.log2('info', 'Reconfiguring providers')
+    prevConfigHash = hashConfig
+    // Unuse all strategies before reconfiguring
+    R.forEach(s => passport.unuse(s), R.map(R.prop('id'), passportStrategies))
 
-		prevConfigHash = h
-		//Unuse all strategies before reconfiguring
-		R.forEach(s => passport.unuse(s), R.map(R.prop('id'), passportStrategies))
+    // "Fix" incoming data
+    fixDataTypes(providers)
+    fillMissingData(providers)
 
-		let providers = R.clone(ps)
-		//"Fix" incoming data
-		fixDataTypes(providers)
-		fillMissingData(providers)
-
-		R.forEach(setupStrategy, providers)
-		//Needed for routes.js
-		global.providers = providers
-	}
-
+    R.forEach(setupStrategy, providers)
+    // Needed for routes.js
+    global.providers = providers
+  }
 }
 
 module.exports = {
-	setup: setup
+  setup: setup,
+  applyMapping: applyMapping
 }
