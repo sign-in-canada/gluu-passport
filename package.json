@@ -32,7 +32,7 @@
     "@sic/passport-openidconnect": "^0.0.4",
     "@sic/passport-saml": "^2.2.2",
     "@sokratis/passport-linkedin-oauth2": "^2.1.0",
-    "applicationinsights": "^2.0.0",
+    "applicationinsights": "^2.1.6",
     "base64url": "^3.0.1",
     "bluebird": "^3.5.3",
     "body-parser": "^1.18.3",
