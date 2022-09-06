@@ -10,7 +10,9 @@ const logger = require('./utils/logging')
 const url = require('url')
 const path = require('path')
 const { handleStrategyError } = require('./utils/error-handler')
+const got = require('got')
 const appInsights = require('applicationinsights')
+const { session } = require('passport')
 
 router.get('/health-check', function (req, res) {
   return res.send({ message: 'Cool!!!', sessionCookie: req.session.cookie })
@@ -106,37 +108,22 @@ router.get('/auth/meta/idp/:idp',
   })
 
 // SP-initiated logout
-router.get('/logout/request', (req, res, next) => {
-  if (!(req.user && req.user.providerKey)) {
-    res.status(400).send('No Session')
-  } else {
-    const provider = req.user.providerKey
-    var strategy = passport._strategy(provider)
+router.get('/logout/request/:authParams', parseParams, (req, res, next) => {
+  req.user = req.locals.authParams
+  var strategy = passport._strategy(req.user.provider)
 
-    // MFA exception: second retry using session provider which should be set in callbackResponse 
-    if (strategy.name != 'saml') {
-      strategy = passport._strategy(req.session.provider)
-    }
-          
-    if (strategy.name === 'saml' && strategy._saml.options.logoutUrl && !req.user.logoutRequest) {
-      const relayState = req.query && req.query.post_logout_redirect_uri
-      if (relayState) {
-        req.query.RelayState = relayState
-      }
-      // Restore the SAML Subject for the logout request
-      req.user = req.session.samlSubject
-      logger.log2('debug', 'SAML Logout of subject ' + JSON.stringify(req.user))
-      appInsights.defaultClient.trackEvent({name: "SP-initiated Logout Request",
-                                            properties: {...{provider: req.params.provider}, ...req.user}})
-      strategy.logout(req, (err, uri) => {
-        req.logout()
-        delete req.session
-        delete req.user
-        res.redirect(uri)
-      })
-    } else {
-      res.send("Success")
-    }
+  if (strategy.name === 'saml' && strategy._saml.options.logoutUrl) {
+    logger.log2('debug', 'SAML Logout of subject ' + JSON.stringify(req.user))
+    appInsights.defaultClient.trackEvent({name: "SP-initiated Logout Request",
+                                          properties: {...{provider: req.params.provider}, ...req.user}})
+    strategy.logout(req, (err, uri) => {
+      req.logout()
+      delete req.session
+      delete req.user
+      res.redirect(uri)
+    })
+  } else {
+    res.send("Success")
   }
 });
 
@@ -149,16 +136,10 @@ router.get('/logout/response/:status?', (req, res, next) => {
     const provider = req.user.providerKey
     var strategy = passport._strategy(provider)
 
-    // MFA exception: second retry using session provider which should be set in callbackResponse 
-    if (strategy.name != 'saml') {
-      strategy = passport._strategy(req.session.provider)
-    }
-          
     if (req.user.logoutRequest) {
-      logger.log2('verbose', 'Sending SAML logout response to provider ' + provider)
       req.samlLogoutRequest = req.user.logoutRequest
       req.samlLogoutRequest.status = 'urn:oasis:names:tc:SAML:2.0:status:' + status
-      strategy._saml.getLogoutResponseUrl(req, {}, (err, url) => {
+      strategy._saml.getLogoutResponseUrl(req, req.user.relayState, {}, (err, url) => {
         if (err) {
           webutil.handleError(req, res, err.message)
         } else {
@@ -272,10 +253,6 @@ function callbackResponse (req, res) {
   user = misc.arrify(user)
   user.provider = provider
 
-  // Save the current provider in case of 2FA (saving the first GCCF provider)
-  const strategy = passport._strategy(provider)
-  if (strategy.name === 'saml' && strategy._saml.options.GCCF && strategy._saml.options.GCCF.toString().toLowerCase() === 'true') req.session.provider = provider
-  
   const now = new Date().getTime()
   const jwt = misc.getRpJWT({
     iss: postUrl,
@@ -338,29 +315,39 @@ function callbackResponse (req, res) {
 }
 
 function processLogout(req, res) {
-	function validateCallback(err, profile, loggedOut) {
-		logger.log2('debug', 'logout callback ' + JSON.stringify(err) + ' ' + JSON.stringify(profile) + ' ' + loggedOut)
+  const validateCallback = async ({ profile, loggedOut }) => {
+		logger.log2('debug', 'logout callback ' + JSON.stringify(profile) + ' ' + loggedOut)
 
-		if (err) {
-			logger.log2('error', err.stack) // Partial or failed Logout
-			res.send(JSON.stringify(err))
-		} else if (profile) { // received a Logout Request
+		if (profile) { // received a Logout Request
       appInsights.defaultClient.trackEvent({name: "IDP-Initiated Logout Request", properties: profile})
 
       req.samlLogoutRequest = profile
-      if (!req.session || !req.headers.cookie || !req.headers.cookie.includes('session_id=')) { // Can't find our session cookie(s). Probably blocked.
+			if (req.session && req.session.authenticating) { // Login is in flight. Must be Administrative SLO.
+        req.samlLogoutRequest.reason = "New session"
+      }
+      else if (!req.session || !req.headers.cookie || !req.cookies.session_id) { // Can't find oxAuth session cookie(s). Probably blocked.
         req.samlLogoutRequest.status = 'urn:oasis:names:tc:SAML:2.0:status:Responder'
         req.samlLogoutRequest.reason = 'Session not found'
       }
-			else if (req.session && req.session.authenticating) { // Login is in flight. Must be Administrative SLO.
-        req.samlLogoutRequest.reason = "New session"
-      }
-      else if (!req.cookies.session_id || req.cookies.session_id.length === 0) { // Already logged off. Possible duplicate request.
+      else if (req.cookies.session_id.length === 0) { // Session no longer exists
         req.samlLogoutRequest.reason = "Old session"
-       }
+      }
+      else {
+        // Check the oxAuth session_status API
+        const responsePromise = got.get(global.basicConfig.sessionStatusEndpont,
+                                        {throwHttpErrors: false,
+                                         headers: {cookie: 'session_id=' + req.cookies.session_id}})
+        const jsonPromise = responsePromise.json()
+        const [httpResponse, statusResponse] = await Promise.all([responsePromise, jsonPromise])
+        expiry = parseInt(statusResponse.custom_state)
+        if (httpResponse.statusCode != 200 || statusResponse.state != 'authenticated'
+             || isNaN(expiry) || expiry - Date.now() < 5000) { // Dont't risk it if session is about to expire
+           req.samlLogoutRequest.reason = "Old session"
+         }
+      }
 
       if (req.samlLogoutRequest.reason) { // Respond immediately
-				strategy._saml.getLogoutResponseUrl(req, {}, (err, url) => {
+				strategy._saml.getLogoutResponseUrl(req, req.query.RelayState, {}, (err, url) => {
 					if (err) {
 						webutil.handleError(req, res, err.message)
 					} else {
@@ -370,6 +357,7 @@ function processLogout(req, res) {
 				})
 			} else { // Propogate logout to oxAuth
 				req.user.logoutRequest = profile
+        req.user.relayState = req.query.RelayState
 				const redirectUri = encodeURIComponent('https://' + req.hostname + '/passport/logout/response')
 				res.redirect('/oxauth/restv1/end_session?post_logout_redirect_uri=' + redirectUri)
 			}
@@ -384,7 +372,13 @@ function processLogout(req, res) {
 	const strategy = passport._strategy(provider)
   
   var originalQuery = url.parse(req.url).query
-  strategy._saml.validateRedirect(req.query, originalQuery, validateCallback)
+  strategy._saml
+  .validateRedirectAsync(req.query, originalQuery)
+  .then(validateCallback)
+  .catch((err) => {
+    logger.log2('error', err.stack) // Partial or failed Logout
+    res.send(JSON.stringify(err))
+  });
 }
 
 function parseParams (req, res, next) {
