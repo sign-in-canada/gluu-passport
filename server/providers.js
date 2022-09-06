@@ -106,6 +106,9 @@ async function setupStrategy (provider) {
         providerOptions.cacheProvider = cacheProvider.get(
           'memcached', providerOptions.memcachedCacheOptions, exp
         )
+      } else {
+        providerOptions.cacheProvider = cacheProvider.get(
+          'inmemory', null, exp)
       }
     }
 

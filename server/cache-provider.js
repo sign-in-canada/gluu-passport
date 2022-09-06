@@ -45,29 +45,23 @@ function getRedisProvider (options, exp) {
   })
 
   return {
-    save: function (key, value, cb) {
+    saveAsync: async function (key, value) {
       if (ready) {
-        setAsync(key, value, 'EX', exp)
-          .then(_ => cb(null, value))
-          .catch(err => cb(err, null))
+        await setAsync(key, value, 'EX', exp)
       } else {
         logger.log2('warn', OPERATION_NO_CONN)
       }
     },
-    get: function (key, cb) {
+    getAsync: async function (key) {
       if (ready) {
-        getAsync(key)
-          .then(value => cb(null, value))
-          .catch(err => cb(err, null))
+        return await getAsync(key)
       } else {
         logger.log2('warn', OPERATION_NO_CONN)
       }
     },
-    remove: function (key, cb) {
+    removeAsync: async function (key) {
       if (ready) {
-        delAsync(key)
-          .then(res => cb(null, res === 0 ? null : key))
-          .catch(err => cb(err, null))
+        await delAsync(key)
       } else {
         logger.log2('warn', OPERATION_NO_CONN)
       }
@@ -83,22 +77,22 @@ function getMemcachedProvider (options, exp) {
   const delAsync = promisify(memcached, 'del')
 
   return {
-    save: function (key, value, cb) {
-      setAsync(key, value, exp)
-        .then(_ => cb(null, value))
-        .catch(err => cb(err, null))
+    saveAsync: async function (key, value) {
+      await setAsync(key, value, exp)
     },
-    get: function (key, cb) {
-      getAsync(key)
-        .then(value => cb(null, value))
-        .catch(err => cb(err, null))
+    getAsync: async function (key) {
+      return await getAsync(key)
     },
-    remove: function (key, cb) {
-      delAsync(key)
-        .then(_ => cb(null, key))
-        .catch(err => cb(err, null))
+    removeAsync: async function (key) {
+      await delAsync(key)
     }
   }
+}
+
+function getInMemoryProvider (exp) {
+  logger.log2('info', 'Configuring in-memory provider for inResponseTo validation')
+  // const { CacheProvider }  = require("@sic/passport-saml")
+  return new (require("../node_modules/@sic/passport-saml/lib/node-saml/inmemory-cache-provider")).CacheProvider({keyExpirationPeriodMs: exp})
 }
 
 function get (type, options, expiration) {
@@ -106,7 +100,10 @@ function get (type, options, expiration) {
     return getRedisProvider(options, expiration)
   } else if (type === 'memcached') {
     return getMemcachedProvider(options, expiration)
-  } else {
+  } else if (type === 'inmemory') {
+    return getInMemoryProvider(expiration)
+  }
+  else {
     logger.log2('warn', `Unknown cache provider ${type}`)
     return null
   }

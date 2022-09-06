@@ -1,7 +1,10 @@
 const expressSession = require('express-session')
-const MemoryStore = require('memorystore')(expressSession)
+let RedisStore = require("connect-redis")(expressSession)
 const config = require('config')
 const { secretKey } = require('./misc')
+
+const { createClient } = require("redis")
+let redisClient = createClient(`rediss://:${config.redisPassword}@sic-dev1.redis.cache.windows.net:6380`)
 
 const expressSessionConfig = {
   cookie: {
@@ -10,9 +13,7 @@ const expressSessionConfig = {
     sameSite: config.get('cookieSameSite'),
     secure: config.get('cookieSecure')
   },
-  store: new MemoryStore({
-    checkPeriod: 86400000 // prune expired entries every 24h
-  }),
+  store: new RedisStore({ client: redisClient }),
   secret: secretKey(),
   resave: false,
   saveUninitialized: false
