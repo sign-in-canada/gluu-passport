@@ -182,7 +182,7 @@ function authenticateRequest (req, res, next) {
   req.session.authenticating = true
   appInsights.defaultClient.trackEvent({name: "Authentication Request",
                                        properties: {...{provider: req.params.provider},
-                                                    ...req.query, ...req.session}})
+                                                    ...req.query, ...req.session, ...req.params}})
   passport.authenticate(req.params.provider, req.passportAuthenticateParams)(req, res, next)
 }
 
