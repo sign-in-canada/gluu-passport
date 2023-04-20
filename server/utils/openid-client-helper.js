@@ -7,7 +7,7 @@ const { logger } = require('./logging')
 const clientJWKSFilePath = path.join(`${process.cwd()}/server`, 'jwks')
 const secretKey = require('./misc').secretKey();
 let ks = new KeyStore();
-const keysPath = "/run/keyvault/keys/";
+const keysPath = "/etc/certs/";
 
 /**
  * generate jwks and store it in file. file name will be like [provider.id].json
