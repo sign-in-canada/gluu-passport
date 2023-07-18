@@ -1,4 +1,4 @@
-const { JWK: { generateSync, asKey }, JWKS: { KeyStore } } = require('jose_v2')
+const { JWK: { generateSync, asKey }, JWKS: { KeyStore } } = require('jose')
 const { Issuer } = require('openid-client')
 const path = require('path')
 const fs = require('fs')
