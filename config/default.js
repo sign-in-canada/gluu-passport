@@ -1,15 +1,16 @@
 module.exports = {
-  passportFile: "/etc/gluu/conf/passport-config.json",
-  saltFile: "/etc/gluu/conf/salt",
-  timerInterval: 2 * 60 * 1000, // 2 minutes in milliseconds
-  rateLimitWindowMs: 24 * 60 * 60 * 1000, // 24 hrs in milliseconds
-  rateLimitMaxRequestAllow: 100000,
+  passportFile: "/opt/gluu-server/etc/gluu/conf/passport-config.json",
+  saltFile: "/opt/gluu-server/etc/gluu/conf/salt",
+  timerInterval: 60000,
+
+  // 24 hrs in milliseconds, Timeframe in miliseconds for which requests are checked/remembered
+  rateLimitWindowMs: 24 * 60 * 60 * 1000,
+
+  // Max number of connections during windowMs milliseconds before sending a 429 response.
+  rateLimitMaxRequestAllow: 1000,
   appInsightsKey: process.env.APPINSIGHTS_INSTRUMENTATIONKEY,
   cookieMaxAge: null,
   cookiePath: "/passport",
-  cookieSameSite: "none",
-  cookieSecure: true,
-  HTTP_PROXY: process.env.HTTP_PROXY,
-  HTTPS_PROXY: process.env.HTTPS_PROXY,
-  NO_PROXY: process.env.NO_PROXY,
+  cookieSameSite: "lax",
+  cookieSecure: false,
 };
