@@ -1,6 +1,6 @@
 {
   "name": "gluu-passport",
-  "version": "5.3.0",
+  "version": "6.0.0",
   "private": true,
   "nyc": {
     "all": true,
@@ -10,7 +10,7 @@
     ]
   },
   "engines": {
-    "node": ">=12.19.0 <=16"
+    "node": ">=14 <=16"
   },
   "scripts": {
     "start": "NODE_ENV=production node server/app.js",
