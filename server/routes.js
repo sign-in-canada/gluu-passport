@@ -209,7 +209,7 @@ function authenticateRequestCasa (req, res, next) {
 function authenticateRequestCallback (req, res, next) {
   logger.log2('verbose', `Authenticating request against ${req.params.provider}`)
   passport.authenticate(
-    req.params.provider, { failureRedirect: '/passport/error', failureFlash: true }
+    req.params.provider, { failureRedirect: '/passport/error', failureFlash: true, session: false }
   )(req, res, next)
 }
 
