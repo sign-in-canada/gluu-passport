@@ -117,11 +117,14 @@ router.get('/logout/request/:authParams', parseParams, (req, res, next) => {
     appInsights.defaultClient.trackEvent({name: "SP-initiated Logout Request",
                                           properties: {...{provider: req.params.provider}, ...req.user}})
     strategy.logout(req, (err, uri) => {
-      req.logout()
-      delete req.session
-      delete req.user
-      res.redirect(uri)
-    })
+      req.logout(function (err) {
+        if (err) return next(err);
+        delete req.session;
+        delete req.user;
+        res.redirect(uri);
+      });
+    });
+
   } else {
     res.send("Success")
   }
