@@ -31,7 +31,7 @@
     "applicationinsights": "^2.5.1",
     "base64url": "^3.0.1",
     "bluebird": "^3.5.3",
-    "body-parser": "^1.20.1",
+    "body-parser": "^1.20.2",
     "config": "^3.3.9",
     "connect-flash": "^0.1.1",
     "cookie-parser": "^1.4.6",
