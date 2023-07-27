@@ -6,6 +6,11 @@ const { logger } = require('./logging');
 const keyStore = new createKeyStore();
 const keyVaultPath = '/run/keyvault/keys/';
 
+/**
+ * Converts a PEM file to a JWK and adds it to the keystore
+ * @param  {String} file Private Key File
+ */
+
 async function addKeytoKeyStore(file) {
 
   const privateKeyPath = path.resolve(keyVaultPath, file);
@@ -37,24 +42,29 @@ async function addKeytoKeyStore(file) {
   }
 }
 
-async function getPrivateKeys() {
+/**
+ * Reads the Key Vault Directory and returns all the files
+ * @returns  {Array} private key files
+ */
+
+async function getPrivateKeyFiles() {
   try {
-    const file = await fs.readdir(keyVaultPath);
-    return file;
+    const files = await fs.readdir(keyVaultPath);
+    return files;
   } catch (error) {
-    logger.log('error', `failed to get private keys: ${error}`)
+    logger.log('error', `failed to get private key files: ${error}`)
   }
 }
 
 /**
- * get keystore after creating and adding private keys
+ * gets private key files from directory and then add them to the keystore
  * @returns keystore
  */
 async function getKeystore() {
   logger.log('verbose', 'Importing private keys into the keystore')
-  const privateKeys = await getPrivateKeys();
-  return Promise.all(privateKeys.map(async privateKey => {
-    await addKeytoKeyStore(privateKey);
+  const privateKeyFiles = await getPrivateKeyFiles();
+  return Promise.all(privateKeyFiles.map(async privateKeyFile => {
+    await addKeytoKeyStore(privateKeyFile);
   }));
 }
 
