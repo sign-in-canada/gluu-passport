@@ -57,7 +57,7 @@
     "uuid": "^8.3.2",
     "winston": "^3.8.2",
     "winston-daily-rotate-file": "^4.7.1",
-    "www-authenticate": "^0.6.2"
+    "www-authenticate": "^0.6.3"
   },
   "description": "Find the docs of this project at: https://gluu.org/docs/gluu-server/authn-guide/passport/",
   "main": "server/app.js",
